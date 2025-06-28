@@ -17,7 +17,6 @@ A modern, responsive web app to check the weather in any city or your current lo
 ## 🚀 Live Demo
 
 [Click here to view live]( https://inviszero.github.io/Weather-Webapp/)  
-> Replace with your actual GitHub Pages URL after deployment.
 
 ---
 
