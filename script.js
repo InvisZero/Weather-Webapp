@@ -1,81 +1,108 @@
-const apiKey = '4eb3703790b356562054106543b748b2'; // Replace this with your actual OpenWeatherMap API key
+const apiKey = 'f03e283ada6ccb3c47d6de30c310a237';
 
 const searchBtn = document.getElementById('search-btn');
-const inputBox = document.getElementById('input-box');
-const weatherBody = document.getElementById('weather-body');
-const locationBtn = document.getElementById('location-btn');
+const locateBtn = document.getElementById('locate-btn');
+const cityInput = document.getElementById('city-input');
+const currentWeatherDiv = document.getElementById('current-weather');
+const forecastDiv = document.getElementById('daily-forecast');
+const hourlyChartCanvas = document.getElementById('hourlyChart');
 
-// Manual city search
 searchBtn.addEventListener('click', () => {
-    const city = inputBox.value.trim();
-    if (city === "") {
-        swal("Oops!", "Please enter a city name.", "warning");
-        return;
-    }
-    getWeatherByCity(city);
+  const city = cityInput.value.trim();
+  if (city) {
+    fetchCityCoordinates(city);
+  }
 });
 
-// Use My Location button
-locationBtn.addEventListener('click', () => {
-    if (navigator.geolocation) {
-        weatherBody.innerHTML = `<p>📡 Detecting your location...</p>`;
-        navigator.geolocation.getCurrentPosition(onPositionSuccess, onPositionError);
-    } else {
-        swal("Oops!", "Geolocation is not supported by your browser.", "error");
+locateBtn.addEventListener('click', () => {
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      fetchWeather(pos.coords.latitude, pos.coords.longitude);
+    },
+    () => {
+      alert("Unable to access location.");
     }
+  );
 });
 
-// Geolocation success
-function onPositionSuccess(position) {
-    const lat = position.coords.latitude;
-    const lon = position.coords.longitude;
-    getWeatherByCoords(lat, lon);
+async function fetchCityCoordinates(city) {
+  const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${city}&limit=1&appid=${apiKey}`;
+  const res = await fetch(geoUrl);
+  const data = await res.json();
+  if (data.length > 0) {
+    const { lat, lon } = data[0];
+    fetchWeather(lat, lon);
+  } else {
+    alert("City not found.");
+  }
 }
 
-// Geolocation error
-function onPositionError(error) {
-    swal("Notice", "Location access denied or unavailable. Please search manually.", "info");
-    console.warn(`Geolocation error: ${error.message}`);
+async function fetchWeather(lat, lon) {
+  const url = `https://api.openweathermap.org/data/3.0/onecall?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  displayCurrent(data);
+  displayDaily(data.daily);
+  renderHourlyChart(data.hourly);
 }
 
-// Fetch weather by city
-async function getWeatherByCity(city) {
-    const apiURL = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric`;
-    await fetchWeather(apiURL);
+function displayCurrent(data) {
+  const weather = data.current.weather[0];
+  currentWeatherDiv.innerHTML = `
+    <h2>${new Date(data.current.dt * 1000).toLocaleString()}</h2>
+    <p><strong>Temperature:</strong> ${data.current.temp}°C</p>
+    <p><strong>Humidity:</strong> ${data.current.humidity}%</p>
+    <p><strong>Wind:</strong> ${data.current.wind_speed} km/h</p>
+    <p><strong>Condition:</strong> ${weather.main} (${weather.description})</p>
+  `;
 }
 
-// Fetch weather by coordinates
-async function getWeatherByCoords(lat, lon) {
-    const apiURL = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`;
-    await fetchWeather(apiURL);
-}
-
-// Unified fetch handler
-async function fetchWeather(apiURL) {
-    try {
-        const response = await fetch(apiURL);
-        if (!response.ok) {
-            throw new Error("Weather data not found.");
-        }
-        const data = await response.json();
-        displayWeather(data);
-    } catch (error) {
-        swal("Error", error.message, "error");
-        weatherBody.innerHTML = "";
-    }
-}
-
-// Display weather info
-function displayWeather(data) {
-    const { name, main, weather, wind } = data;
-
-    weatherBody.innerHTML = `
-        <div class="weather-card">
-            <h2>${name}</h2>
-            <p><strong>Temperature:</strong> ${main.temp}°C</p>
-            <p><strong>Condition:</strong> ${weather[0].description}</p>
-            <p><strong>Humidity:</strong> ${main.humidity}%</p>
-            <p><strong>Wind Speed:</strong> ${wind.speed} m/s</p>
-        </div>
+function displayDaily(daily) {
+  forecastDiv.innerHTML = '';
+  daily.slice(0, 7).forEach(day => {
+    const date = new Date(day.dt * 1000);
+    const icon = day.weather[0].icon;
+    forecastDiv.innerHTML += `
+      <div class="day-card">
+        <p>${date.toLocaleDateString(undefined, { weekday: 'short' })}</p>
+        <img src="https://openweathermap.org/img/wn/${icon}@2x.png" alt="">
+        <p>${Math.round(day.temp.max)}° / ${Math.round(day.temp.min)}°</p>
+      </div>
     `;
+  });
+}
+
+let hourlyChart;
+
+function renderHourlyChart(hourly) {
+  const hours = hourly.slice(0, 12).map(h => new Date(h.dt * 1000).getHours() + ":00");
+  const temps = hourly.slice(0, 12).map(h => h.temp);
+
+  if (hourlyChart) hourlyChart.destroy();
+
+  hourlyChart = new Chart(hourlyChartCanvas, {
+    type: 'line',
+    data: {
+      labels: hours,
+      datasets: [{
+        label: 'Temp (°C)',
+        data: temps,
+        backgroundColor: 'rgba(33, 150, 243, 0.2)',
+        borderColor: '#2196F3',
+        borderWidth: 2,
+        tension: 0.3,
+        fill: true
+      }]
+    },
+    options: {
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        y: {
+          beginAtZero: false
+        }
+      }
+    }
+  });
 }
